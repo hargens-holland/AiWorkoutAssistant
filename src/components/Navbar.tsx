@@ -27,21 +27,25 @@ export function Navbar() {
                     <div className="flex items-center space-x-4">
                         {session ? (
                             <>
-                                <Link href="/dashboard" className="text-gray-700 hover:text-gray-900">
-                                    Dashboard
-                                </Link>
-                                <Link href="/plan" className="text-gray-700 hover:text-gray-900">
-                                    Plan
-                                </Link>
-                                <Link href="/calendar" className="text-gray-700 hover:text-gray-900">
-                                    Calendar
-                                </Link>
-                                <Link href="/chat" className="text-gray-700 hover:text-gray-900">
-                                    Chat
-                                </Link>
-                                <Link href="/settings" className="text-gray-700 hover:text-gray-900">
-                                    Settings
-                                </Link>
+                                {session && (
+                                    <>
+                                        <Link href="/dashboard" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                                            Dashboard
+                                        </Link>
+                                        <Link href="/plans" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                                            Plans
+                                        </Link>
+                                        <Link href="/calendar" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                                            Calendar
+                                        </Link>
+                                        <Link href="/chat" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                                            Chat
+                                        </Link>
+                                        <Link href="/settings" className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium">
+                                            Settings
+                                        </Link>
+                                    </>
+                                )}
                                 <Button onClick={handleSignOut} variant="outline">
                                     Sign Out
                                 </Button>
