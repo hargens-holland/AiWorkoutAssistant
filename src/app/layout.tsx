@@ -1,24 +1,24 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { Navbar } from "@/components/Navbar";
-import { AuthProvider } from "@/components/AuthProvider";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { AuthProvider } from '@/components/AuthProvider';
+import { Navbar } from '@/components/Navbar';
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "FitSmith - AI Workout & Meal Planner",
-  description: "Personal AI-powered workout and meal planning assistant",
+  title: 'FitSmith - AI-Powered Fitness Planning',
+  description: 'Personalized workout and meal plans with AI assistance',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={inter.className} suppressHydrationWarning={true}>
         <AuthProvider>
           <div className="min-h-screen bg-gray-50">
             <Navbar />

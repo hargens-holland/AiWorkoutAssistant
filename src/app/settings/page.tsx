@@ -1,23 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Calendar, User, Shield, Download, Trash2 } from 'lucide-react';
 
-export default function SettingsPage() {
-    const [settings, setSettings] = useState({
-        timezone: 'America/New_York',
-        calendarSync: true,
-        emailNotifications: true,
-        pushNotifications: false
-    });
-
-    const [profile, setProfile] = useState({
+function SettingsContent() {
+    const [profileData, setProfileData] = useState({
         name: 'John Doe',
         email: 'john@example.com',
         height: '175',
@@ -25,52 +17,58 @@ export default function SettingsPage() {
         activityLevel: 'moderate'
     });
 
-    const handleProfileUpdate = async () => {
+    const [notifications, setNotifications] = useState({
+        workoutReminders: true,
+        mealReminders: true,
+        progressUpdates: false,
+        weeklyReports: true
+    });
+
+    const handleProfileUpdate = () => {
+        console.log('Profile updated:', profileData);
         // TODO: Implement profile update API call
-        console.log('Updating profile:', profile);
     };
 
-    const handleCalendarSync = async () => {
-        // TODO: Implement Google Calendar OAuth
-        console.log('Connecting to Google Calendar...');
+    const handleNotificationToggle = (key: keyof typeof notifications) => {
+        setNotifications(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
     };
 
-    const handleExportData = async () => {
+    const handleDataExport = () => {
+        console.log('Exporting data...');
         // TODO: Implement data export
-        console.log('Exporting user data...');
     };
 
-    const handleDeleteAccount = async () => {
+    const handleAccountDeletion = () => {
         if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+            console.log('Account deletion requested...');
             // TODO: Implement account deletion
-            console.log('Deleting account...');
         }
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto p-6 space-y-6">
             <div>
                 <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-                <p className="text-gray-600">Manage your account and preferences</p>
+                <p className="text-gray-600">Manage your account preferences and settings</p>
             </div>
 
-            {/* Profile Settings */}
+            {/* Profile Information */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <User className="h-5 w-5 text-blue-600" />
-                        Profile Information
-                    </CardTitle>
-                    <CardDescription>Update your personal information and fitness profile</CardDescription>
+                    <CardTitle>Profile Information</CardTitle>
+                    <CardDescription>Update your personal information and preferences</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label htmlFor="name">Full Name</Label>
                             <Input
                                 id="name"
-                                value={profile.name}
-                                onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
+                                value={profileData.name}
+                                onChange={(e) => setProfileData(prev => ({ ...prev, name: e.target.value }))}
                             />
                         </div>
                         <div>
@@ -78,17 +76,19 @@ export default function SettingsPage() {
                             <Input
                                 id="email"
                                 type="email"
-                                value={profile.email}
-                                onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
+                                value={profileData.email}
+                                onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
                             />
                         </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label htmlFor="height">Height (cm)</Label>
                             <Input
                                 id="height"
                                 type="number"
-                                value={profile.height}
-                                onChange={(e) => setProfile(prev => ({ ...prev, height: e.target.value }))}
+                                value={profileData.height}
+                                onChange={(e) => setProfileData(prev => ({ ...prev, height: e.target.value }))}
                             />
                         </div>
                         <div>
@@ -96,16 +96,16 @@ export default function SettingsPage() {
                             <Input
                                 id="weight"
                                 type="number"
-                                value={profile.weight}
-                                onChange={(e) => setProfile(prev => ({ ...prev, weight: e.target.value }))}
+                                value={profileData.weight}
+                                onChange={(e) => setProfileData(prev => ({ ...prev, weight: e.target.value }))}
                             />
                         </div>
                     </div>
                     <div>
                         <Label htmlFor="activityLevel">Activity Level</Label>
                         <Select
-                            value={profile.activityLevel}
-                            onValueChange={(value) => setProfile(prev => ({ ...prev, activityLevel: value }))}
+                            value={profileData.activityLevel}
+                            onValueChange={(value) => setProfileData(prev => ({ ...prev, activityLevel: value }))}
                         >
                             <SelectTrigger>
                                 <SelectValue />
@@ -123,103 +123,28 @@ export default function SettingsPage() {
                 </CardContent>
             </Card>
 
-            {/* Calendar & Sync Settings */}
+            {/* Notifications */}
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-green-600" />
-                        Calendar & Sync
-                    </CardTitle>
-                    <CardDescription>Manage your Google Calendar integration and timezone</CardDescription>
+                    <CardTitle>Notifications</CardTitle>
+                    <CardDescription>Choose what notifications you want to receive</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label htmlFor="timezone">Timezone</Label>
-                            <p className="text-sm text-gray-600">Used for scheduling workouts and meals</p>
-                        </div>
-                        <Select
-                            value={settings.timezone}
-                            onValueChange={(value) => setSettings(prev => ({ ...prev, timezone: value }))}
-                        >
-                            <SelectTrigger className="w-48">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                                <SelectItem value="America/Chicago">Central Time</SelectItem>
-                                <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                                <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                                <SelectItem value="Europe/London">London</SelectItem>
-                                <SelectItem value="Europe/Paris">Paris</SelectItem>
-                                <SelectItem value="Asia/Tokyo">Tokyo</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label>Google Calendar Sync</Label>
-                            <p className="text-sm text-gray-600">Automatically sync workouts and meals to your calendar</p>
-                        </div>
-                        <Switch
-                            checked={settings.calendarSync}
-                            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, calendarSync: checked }))}
-                        />
-                    </div>
-
-                    {settings.calendarSync && (
-                        <div className="p-4 bg-blue-50 rounded-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="font-medium text-blue-900">Calendar Connected</p>
-                                    <p className="text-sm text-blue-700">john.doe@gmail.com</p>
-                                </div>
-                                <Button variant="outline" size="sm" onClick={handleCalendarSync}>
-                                    Reconnect
-                                </Button>
+                    <div className="space-y-3">
+                        {Object.entries(notifications).map(([key, value]) => (
+                            <div key={key} className="flex items-center justify-between">
+                                <Label htmlFor={key} className="capitalize">
+                                    {key.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                                </Label>
+                                <input
+                                    id={key}
+                                    type="checkbox"
+                                    checked={value}
+                                    onChange={() => handleNotificationToggle(key as keyof typeof notifications)}
+                                    className="rounded"
+                                />
                             </div>
-                        </div>
-                    )}
-
-                    {!settings.calendarSync && (
-                        <Button onClick={handleCalendarSync} className="w-full">
-                            Connect Google Calendar
-                        </Button>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* Notification Settings */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Shield className="h-5 w-5 text-purple-600" />
-                        Notifications
-                    </CardTitle>
-                    <CardDescription>Choose how you want to be notified</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label>Email Notifications</Label>
-                            <p className="text-sm text-gray-600">Weekly progress reports and plan updates</p>
-                        </div>
-                        <Switch
-                            checked={settings.emailNotifications}
-                            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, emailNotifications: checked }))}
-                        />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label>Push Notifications</Label>
-                            <p className="text-sm text-gray-600">Workout reminders and daily check-ins</p>
-                        </div>
-                        <Switch
-                            checked={settings.pushNotifications}
-                            onCheckedChange={(checked) => setSettings(prev => ({ ...prev, pushNotifications: checked }))}
-                        />
+                        ))}
                     </div>
                 </CardContent>
             </Card>
@@ -228,32 +153,30 @@ export default function SettingsPage() {
             <Card>
                 <CardHeader>
                     <CardTitle>Data Management</CardTitle>
-                    <CardDescription>Export your data or delete your account</CardDescription>
+                    <CardDescription>Export your data or manage your account</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label>Export Data</Label>
-                            <p className="text-sm text-gray-600">Download all your fitness data and plans</p>
-                        </div>
-                        <Button variant="outline" onClick={handleExportData} className="flex items-center gap-2">
-                            <Download className="h-4 w-4" />
-                            Export
+                    <div className="flex gap-4">
+                        <Button variant="outline" onClick={handleDataExport}>
+                            Export My Data
                         </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <Label>Delete Account</Label>
-                            <p className="text-sm text-gray-600">Permanently remove your account and all data</p>
-                        </div>
-                        <Button variant="destructive" onClick={handleDeleteAccount} className="flex items-center gap-2">
-                            <Trash2 className="h-4 w-4" />
+                        <Button variant="destructive" onClick={handleAccountDeletion}>
                             Delete Account
                         </Button>
                     </div>
+                    <p className="text-sm text-gray-600">
+                        Export your data as a JSON file containing your profile, goals, and progress data.
+                    </p>
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export default function SettingsPage() {
+    return (
+        <ProtectedRoute>
+            <SettingsContent />
+        </ProtectedRoute>
     );
 }

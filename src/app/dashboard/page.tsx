@@ -1,206 +1,199 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar, Target, TrendingUp, Clock } from 'lucide-react';
-import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 
-export default function DashboardPage() {
-  // Mock data - replace with real data from API
-  const todayWorkout = {
-    title: "Upper Body Strength",
-    focus: "upper",
-    duration: 45,
-    exercises: [
-      { name: "Push-ups", sets: 3, reps: "10-15" },
-      { name: "Dumbbell Rows", sets: 3, reps: "12 each arm" },
-      { name: "Shoulder Press", sets: 3, reps: "10" }
-    ]
+interface UserProfile {
+  height_cm: number;
+  weight_kg: number;
+  activity_level: string;
+  dietary_prefs: any;
+  equipment: string[];
+}
+
+interface Goal {
+  id: string;
+  title: string;
+  goal_type: string;
+  status: string;
+  target_value: any;
+  progress: any;
+}
+
+function DashboardContent() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userGoals, setUserGoals] = useState<Goal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!session?.user?.email) return;
+
+    // Fetch user data
+    fetchUserData();
+  }, [session]);
+
+  const fetchUserData = async () => {
+    if (!session?.user?.email) return;
+
+    try {
+      setIsLoading(true);
+
+      // Fetch user profile
+      const profileResponse = await fetch(`/api/users/profile?userId=${session.user.email}`);
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        setUserProfile(profileData.profile);
+      }
+
+      // Fetch user goals
+      const goalsResponse = await fetch(`/api/goals?userId=${session.user.email}`);
+      if (goalsResponse.ok) {
+        const goalsData = await goalsResponse.json();
+        setUserGoals(goalsData.goals);
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const todayMeals = {
-    target_kcal: 2000,
-    current_kcal: 0,
-    meals: ["Breakfast", "Lunch", "Dinner", "Snacks"]
-  };
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Loading Dashboard...</h1>
+          <p className="text-gray-600">Please wait while we fetch your data.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show onboarding prompt if no profile
+  if (!userProfile) {
+    return (
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to FitSmith!</h1>
+          <p className="text-gray-600">Let's set up your profile to get started.</p>
+          <Button onClick={() => router.push('/onboarding')} className="mt-4">
+            Complete Profile Setup
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <Button asChild>
-          <Link href="/plan">View Full Plan</Link>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Welcome back, {session?.user?.name || session?.user?.email}!</h1>
+          <p className="text-gray-600">Here's your fitness overview</p>
+        </div>
+        <Button onClick={() => router.push('/onboarding')}>
+          Update Profile
         </Button>
       </div>
 
-      {/* Today's Overview */}
-      <div className="grid md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Workout</CardTitle>
-            <Target className="h-4 w-4 text-blue-600" />
+          <CardHeader>
+            <CardTitle>Today's Workout</CardTitle>
+            <CardDescription>Your scheduled workout</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{todayWorkout.title}</div>
-            <p className="text-xs text-muted-foreground">
-              {todayWorkout.duration} min • {todayWorkout.focus} focus
+            {userGoals.length > 0 ? (
+              <div>
+                <p className="text-sm text-gray-600">Based on your goal:</p>
+                <p className="font-semibold">{userGoals[0].title}</p>
+                <Badge variant="secondary" className="mt-2">
+                  {userGoals[0].goal_type.replace('_', ' ')}
+                </Badge>
+              </div>
+            ) : (
+              <p className="text-gray-500">No workouts scheduled</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Daily Calories</CardTitle>
+            <CardDescription>Target based on your profile</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-blue-600">
+              {userProfile.weight_kg * 15} kcal
+            </p>
+            <p className="text-sm text-gray-600">
+              Based on {userProfile.weight_kg}kg weight
             </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Calories Today</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
+          <CardHeader>
+            <CardTitle>Next Workout</CardTitle>
+            <CardDescription>When to work out next</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{todayMeals.current_kcal}</div>
-            <p className="text-xs text-muted-foreground">
-              of {todayMeals.target_kcal} target
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Next Workout</CardTitle>
-            <Clock className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">Tomorrow</div>
-            <p className="text-xs text-muted-foreground">
-              Lower Body • 50 min
+            <p className="text-lg font-semibold">Tomorrow</p>
+            <p className="text-sm text-gray-600">
+              {userProfile.activity_level === 'moderate' ? '3-5 days/week' : 'Flexible schedule'}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="today" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="today">Today</TabsTrigger>
-          <TabsTrigger value="week">This Week</TabsTrigger>
-          <TabsTrigger value="progress">Progress</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="today" className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Today's Workout */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Today's Workout</CardTitle>
-                <CardDescription>{todayWorkout.title}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {todayWorkout.exercises.map((exercise, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <span className="font-medium">{exercise.name}</span>
-                      <span className="text-sm text-gray-600">
-                        {exercise.sets} sets × {exercise.reps}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <Button className="w-full mt-4" asChild>
-                  <Link href="/plan">View Full Workout</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Today's Meals */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Today's Meals</CardTitle>
-                <CardDescription>Nutrition Plan</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {todayMeals.meals.map((meal, index) => (
-                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <span className="font-medium">{meal}</span>
-                      <span className="text-sm text-gray-600">Plan ready</span>
-                    </div>
-                  ))}
-                </div>
-                <Button className="w-full mt-4" variant="outline" asChild>
-                  <Link href="/plan">View Meal Details</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="week" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Weekly Overview</CardTitle>
-              <CardDescription>Your plan for the next 7 days</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-2">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
-                  <div key={day} className="text-center p-3 bg-gray-50 rounded-lg">
-                    <div className="font-medium text-sm">{day}</div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      {index % 3 === 0 ? 'Upper' : index % 3 === 1 ? 'Lower' : 'Rest'}
+      {/* Rest of your dashboard content */}
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Goals</CardTitle>
+            <CardDescription>Active fitness goals</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {userGoals.length > 0 ? (
+              <div className="space-y-4">
+                {userGoals.map((goal) => (
+                  <div key={goal.id} className="border rounded-lg p-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium">{goal.title}</p>
+                        <p className="text-sm text-gray-600">
+                          {goal.goal_type.replace('_', ' ')}
+                        </p>
+                      </div>
+                      <Badge variant={goal.status === 'active' ? 'default' : 'secondary'}>
+                        {goal.status}
+                      </Badge>
                     </div>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="progress" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Progress Tracking</CardTitle>
-              <CardDescription>Monitor your fitness journey</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span>Weight Goal</span>
-                  <span className="text-sm text-gray-600">70kg → 65kg</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: '60%' }}></div>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <span>Workout Consistency</span>
-                  <span className="text-sm text-gray-600">4/7 days</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-green-600 h-2 rounded-full" style={{ width: '57%' }}></div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <Button variant="outline" asChild>
-              <Link href="/chat">Modify Plan</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/plan">View Full Plan</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/settings">Settings</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            ) : (
+              <p className="text-gray-500">No goals set yet. Complete your profile setup to get started!</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }
