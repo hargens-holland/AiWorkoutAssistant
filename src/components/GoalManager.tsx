@@ -1,11 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { GoalSetupForm } from './GoalSetupForm';
-import { Goal } from '@/lib/types';
-import { useGoal } from '@/contexts/GoalContext';
+
+interface Goal {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  target: string;
+  timeframe: string;
+  start_date: string;
+  target_date: string;
+  is_active: boolean;
+  progress: number;
+  created_at: string;
+  updated_at: string;
+}
 
 interface GoalManagerProps {
   userId: string;
@@ -13,11 +28,10 @@ interface GoalManagerProps {
 }
 
 export function GoalManager({ userId, onGoalChange }: GoalManagerProps) {
-  const { activeGoal, setActiveGoal, refreshActiveGoal } = useGoal();
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   useEffect(() => {
     fetchGoals();
@@ -25,7 +39,6 @@ export function GoalManager({ userId, onGoalChange }: GoalManagerProps) {
 
   const fetchGoals = async () => {
     try {
-      setIsLoading(true);
       const response = await fetch(`/api/goals?userId=${userId}`);
       if (response.ok) {
         const data = await response.json();
@@ -38,327 +51,176 @@ export function GoalManager({ userId, onGoalChange }: GoalManagerProps) {
     }
   };
 
-  const handleCreateGoal = async (goalData: Partial<Goal>) => {
+  const setActiveGoal = async (goalId: string) => {
     try {
-      const response = await fetch('/api/goals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...goalData,
-          userId,
-          isActive: goals.length === 0 // First goal becomes active
-        })
-      });
-
-      if (response.ok) {
-        const newGoal = await response.json();
-        setGoals([...goals, newGoal]);
-
-        if (goals.length === 0) {
-          setActiveGoal(newGoal);
+      // First, deactivate all goals
+      for (const goal of goals) {
+        if (goal.id !== goalId) {
+          await fetch(`/api/goals/${goal.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...goal, isActive: false }),
+          });
         }
-
-        // Refresh the context
-        await refreshActiveGoal();
-
-        setShowCreateForm(false);
-        onGoalChange();
       }
-    } catch (error) {
-      console.error('Error creating goal:', error);
-    }
-  };
 
-  const handleUpdateGoal = async (goalData: Partial<Goal>) => {
-    if (!editingGoal) return;
-
-    try {
-      const response = await fetch(`/api/goals/${editingGoal.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(goalData)
-      });
-
-      if (response.ok) {
-        const updatedGoal = await response.json();
-        setGoals(goals.map(g => g.id === updatedGoal.id ? updatedGoal : g));
-
-        if (updatedGoal.isActive) {
-          setActiveGoal(updatedGoal);
-          await refreshActiveGoal();
-          onGoalChange();
-        }
-
-        setEditingGoal(null);
-      }
-    } catch (error) {
-      console.error('Error updating goal:', error);
-    }
-  };
-
-  const handleActivateGoal = async (goalId: string) => {
-    try {
-      console.log('🔄 Activating goal:', goalId);
-
-      // Deactivate all goals first
-      const deactivatePromises = goals.map(goal =>
-        fetch(`/api/goals/${goal.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isActive: false })
-        })
-      );
-
-      await Promise.all(deactivatePromises);
-      console.log('✅ All goals deactivated');
-
-      // Activate the selected goal
+      // Then activate the selected goal
       const response = await fetch(`/api/goals/${goalId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: true })
+        body: JSON.stringify({ ...goals.find(g => g.id === goalId), isActive: true }),
       });
 
       if (response.ok) {
-        const updatedGoal = await response.json();
-        console.log('✅ Goal activated:', updatedGoal.title);
-
-        // Update local state immediately
-        const updatedGoals = goals.map(g => ({
-          ...g,
-          isActive: g.id === goalId
-        }));
-        setGoals(updatedGoals);
-
-        // Update context without triggering navigation
-        setActiveGoal(updatedGoal);
-        console.log('🔄 GoalManager: Updated local activeGoal state');
-
-        // Don't refresh context immediately - it will overwrite our state
-        // await refreshActiveGoal();
-        console.log('🔄 GoalManager: Skipped refreshActiveGoal to prevent race condition');
-
-        // Notify parent (but don't navigate)
-        onGoalChange();
-        console.log('🔄 GoalManager: Called onGoalChange');
-
-        console.log(`🎯 "${updatedGoal.title}" is now your active goal!`);
-
-        // Debug: Check context state
-        console.log('🔍 GoalManager: Current context activeGoal:', updatedGoal);
+        console.log('✅ Goal activated:', goalId);
+        await fetchGoals(); // Refresh the goals list
+        onGoalChange(); // Notify parent component
       }
     } catch (error) {
-      console.error('❌ Error activating goal:', error);
+      console.error('Error setting active goal:', error);
     }
   };
 
-  const handleDeleteGoal = async (goalId: string) => {
+  const deleteGoal = async (goalId: string) => {
     if (!confirm('Are you sure you want to delete this goal?')) return;
 
     try {
       const response = await fetch(`/api/goals/${goalId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
 
       if (response.ok) {
-        const updatedGoals = goals.filter(g => g.id !== goalId);
-        setGoals(updatedGoals);
-
-        if (activeGoal?.id === goalId) {
-          const newActiveGoal = updatedGoals.find(g => g.isActive) || null;
-          setActiveGoal(newActiveGoal);
-          await refreshActiveGoal();
-          onGoalChange();
-        }
+        console.log('✅ Goal deleted:', goalId);
+        await fetchGoals(); // Refresh the goals list
+        onGoalChange(); // Notify parent component
       }
     } catch (error) {
       console.error('Error deleting goal:', error);
     }
   };
 
-  const calculateProgress = (goal: Goal) => {
-    if (goal.type === 'weight_loss' && goal.currentWeight && goal.targetWeight) {
-      const total = Math.abs(goal.currentWeight - goal.targetWeight);
-      const current = Math.abs(goal.currentWeight - goal.targetWeight);
-      return Math.min(100, Math.max(0, ((total - current) / total) * 100));
-    }
-    return goal.progress || 0;
+  const handleEditGoal = (goal: Goal) => {
+    setEditingGoal(goal);
+    setShowEditForm(true);
+  };
+
+  const handleEditComplete = async () => {
+    setShowEditForm(false);
+    setEditingGoal(null);
+    await fetchGoals();
+    onGoalChange();
   };
 
   if (isLoading) {
     return (
-      <div className="text-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="text-gray-600 mt-2">Loading goals...</p>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center">Loading goals...</div>
+        </CardContent>
+      </Card>
     );
   }
 
-  if (showCreateForm) {
+  if (goals.length === 0) {
     return (
-      <div className="space-y-4">
-        <Button onClick={() => setShowCreateForm(false)} variant="outline">
-          ← Back to Goals
-        </Button>
-        <GoalSetupForm onSubmit={handleCreateGoal} />
-      </div>
-    );
-  }
-
-  if (editingGoal) {
-    return (
-      <div className="space-y-4">
-        <Button onClick={() => setEditingGoal(null)} variant="outline">
-          ← Back to Goals
-        </Button>
-        <GoalSetupForm
-          onSubmit={handleUpdateGoal}
-          initialData={editingGoal}
-          isEditing={true}
-        />
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center text-gray-500">
+            <p className="mb-4">No goals created yet.</p>
+            <p className="text-sm">Use the "Create New Goal" button above to get started!</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Your Fitness Goals</h2>
-        <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
-          ➕ Create New Goal
-        </Button>
-      </div>
-
-      {/* Active Goal */}
-      {activeGoal && (
-        <Card className="border-2 border-green-200 bg-green-50">
+    <div className="space-y-4">
+      {goals.map((goal) => (
+        <Card key={goal.id} className={goal.is_active ? 'ring-2 ring-blue-500' : ''}>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              🎯 Active Goal: {activeGoal.title}
-              <span className="text-sm font-normal text-green-600 bg-green-100 px-2 py-1 rounded">
-                ACTIVE
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <p className="text-gray-700">{activeGoal.description}</p>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium">Target:</span> {activeGoal.target}
-                </div>
-                <div>
-                  <span className="font-medium">Timeframe:</span> {activeGoal.timeframe}
-                </div>
-                <div>
-                  <span className="font-medium">Start Date:</span> {new Date(activeGoal.startDate).toLocaleDateString()}
-                </div>
-                <div>
-                  <span className="font-medium">Target Date:</span> {new Date(activeGoal.targetDate).toLocaleDateString()}
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <CardTitle className="text-lg">{goal.title}</CardTitle>
+                {goal.is_active && (
+                  <Badge variant="default" className="bg-green-600">
+                    Active
+                  </Badge>
+                  )}
+                <Badge variant="outline">{goal.type}</Badge>
               </div>
-
-              {/* Progress Bar */}
-              <div className="mt-4">
-                <div className="flex justify-between text-sm text-gray-600 mb-1">
-                  <span>Progress</span>
-                  <span>{Math.round(calculateProgress(activeGoal))}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${calculateProgress(activeGoal)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
+              <div className="flex space-x-2">
+                {!goal.is_active && (
+                  <Button
+                    onClick={() => setActiveGoal(goal.id)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Activate
+                  </Button>
+                )}
                 <Button
-                  onClick={() => setEditingGoal(activeGoal)}
-                  variant="outline"
+                  onClick={() => handleEditGoal(goal)}
                   size="sm"
+                  variant="outline"
                 >
-                  ✏️ Edit Goal
+                  Edit
                 </Button>
                 <Button
-                  onClick={() => handleDeleteGoal(activeGoal.id)}
-                  variant="outline"
+                  onClick={() => deleteGoal(goal.id)}
                   size="sm"
-                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  variant="outline"
+                  className="text-red-600 hover:text-red-700"
                 >
-                  🗑️ Delete Goal
+                  Delete
                 </Button>
               </div>
             </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600 mb-3">{goal.description}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+              <div>
+                <span className="font-medium text-gray-700">Target:</span>
+                <p className="text-gray-600">{goal.target}</p>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Timeframe:</span>
+                <p className="text-gray-600">{goal.timeframe}</p>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Start Date:</span>
+                <p className="text-gray-600">{new Date(goal.start_date).toLocaleDateString()}</p>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Target Date:</span>
+                <p className="text-gray-600">{new Date(goal.target_date).toLocaleDateString()}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Progress</span>
+                <span>{goal.progress || 0}%</span>
+              </div>
+              <Progress value={goal.progress || 0} className="h-2" />
+            </div>
           </CardContent>
         </Card>
-      )}
+      ))}
 
-      {/* Other Goals */}
-      {goals.filter(g => !g.isActive).length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-800">Other Goals</h3>
-          <div className="grid gap-4 md:grid-cols-2">
-            {goals.filter(g => !g.isActive).map(goal => (
-              <Card key={goal.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <CardTitle className="text-lg">{goal.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <p className="text-gray-600 text-sm">{goal.description}</p>
-                    <div className="text-sm text-gray-600">
-                      <div><strong>Target:</strong> {goal.target}</div>
-                      <div><strong>Timeframe:</strong> {goal.timeframe}</div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => handleActivateGoal(goal.id)}
-                        size="sm"
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        🎯 Activate
-                      </Button>
-                      <Button
-                        onClick={() => setEditingGoal(goal)}
-                        variant="outline"
-                        size="sm"
-                      >
-                        ✏️ Edit
-                      </Button>
-                      <Button
-                        onClick={() => handleDeleteGoal(goal.id)}
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        🗑️ Delete
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+      {/* Edit Goal Form Modal */}
+      {showEditForm && editingGoal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Edit Goal: {editingGoal.title}</h2>
+            <GoalSetupForm
+              onSubmit={handleEditComplete}
+              onCancel={() => setShowEditForm(false)}
+              initialData={editingGoal}
+              isEditing={true}
+            />
           </div>
         </div>
-      )}
-
-      {/* No Goals Message */}
-      {goals.length === 0 && (
-        <Card className="text-center py-12">
-          <CardContent>
-            <div className="text-6xl mb-4">🎯</div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">No Goals Set Yet</h3>
-            <p className="text-gray-600 mb-6">
-              Set your first fitness goal to get started with personalized workout and meal plans!
-            </p>
-            <Button onClick={() => setShowCreateForm(true)} className="bg-blue-600 hover:bg-blue-700">
-              Create Your First Goal
-            </Button>
-          </CardContent>
-        </Card>
       )}
     </div>
   );
