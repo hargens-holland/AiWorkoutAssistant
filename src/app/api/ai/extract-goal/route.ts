@@ -14,45 +14,29 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create a system prompt for data extraction
-        const systemPrompt = `You are a fitness data extraction specialist. Your job is to analyze a conversation about fitness goals and extract structured data.
+        // Create a system prompt for data extraction - simplified to essential fields
+        const systemPrompt = `You are a fitness data extraction specialist. Extract ONLY these essential fields from the conversation:
 
-    Extract the following information from the conversation:
+    REQUIRED FIELDS:
     - goal_type: "weight_loss", "muscle_gain", "endurance", "strength", "general_fitness", or "flexibility"
     - target: A specific, measurable target (e.g., "Lose 20 pounds", "Bench 225 pounds", "Run a 5k")
     - timeframe: Estimated timeframe (e.g., "3 months", "6 months", "1 year")
-    - current_weight: Current weight if mentioned (number only)
-    - target_weight: Target weight if mentioned (number only)
-    - current_bench: Current bench press if mentioned (number only)
-    - target_bench: Target bench press if mentioned (number only)
-    - current_mile_time: Current mile time if mentioned (format: "MM:SS")
-    - target_mile_time: Target mile time if mentioned (format: "MM:SS")
-    - workout_days: Array of workout days (e.g., ["monday", "wednesday", "friday"])
-    - workout_duration: Workout duration in minutes (number only)
-    - workout_time: Preferred workout time ("morning", "afternoon", "evening", or "flexible")
-    - experience_level: "beginner", "intermediate", or "advanced"
+    
+    OPTIONAL FIELDS (use defaults if not mentioned):
     - available_equipment: Array of available equipment (e.g., ["dumbbells", "gym_access", "bodyweight"])
-    - dietary_restrictions: Array of dietary restrictions (e.g., ["vegetarian", "gluten_free", "none"])
+    - workout_days: Array of workout days (default: ["monday", "wednesday", "friday"])
+    - workout_duration: Workout duration in minutes (default: 45)
 
-    Return ONLY a valid JSON object with these fields. If a field is not mentioned or unclear, use null or an appropriate default value.
+    Return ONLY a valid JSON object. If a field is not mentioned, use null or appropriate defaults.
     
     Example response format:
     {
       "goal_type": "weight_loss",
       "target": "Lose 20 pounds",
       "timeframe": "3 months",
-      "current_weight": 180,
-      "target_weight": 160,
-      "current_bench": null,
-      "target_bench": null,
-      "current_mile_time": null,
-      "target_mile_time": null,
+      "available_equipment": ["dumbbells", "bodyweight"],
       "workout_days": ["monday", "wednesday", "friday"],
-      "workout_duration": 45,
-      "workout_time": "evening",
-      "experience_level": "beginner",
-      "available_equipment": ["dumbbells"],
-      "dietary_restrictions": ["none"]
+      "workout_duration": 45
     }`;
 
         // Format messages for OpenAI
@@ -124,18 +108,9 @@ Extract the fitness goal data as JSON: [/INST]`;
                     goal_type: 'weight_loss',
                     target: 'Lose weight and get stronger',
                     timeframe: '3 months',
-                    current_weight: 180,
-                    target_weight: 160,
-                    current_bench: null,
-                    target_bench: 225,
-                    current_mile_time: null,
-                    target_mile_time: null,
-                    workout_days: ['monday', 'wednesday', 'friday'],
-                    workout_duration: 45,
-                    workout_time: 'evening',
-                    experience_level: 'beginner',
                     available_equipment: ['dumbbells', 'bodyweight'],
-                    dietary_restrictions: ['none']
+                    workout_days: ['monday', 'wednesday', 'friday'],
+                    workout_duration: 45
                 });
             }
 

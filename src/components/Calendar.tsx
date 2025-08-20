@@ -14,6 +14,15 @@ interface CalendarEvent {
   colorId?: string;
 }
 
+interface StoredPlan {
+  id: string;
+  goal_id: string;
+  user_id: string;
+  plan_data: any;
+  created_at: string;
+  updated_at: string;
+}
+
 interface CalendarProps {
   userId: string;
 }
@@ -22,6 +31,10 @@ export function Calendar({ userId }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [storedPlans, setStoredPlans] = useState<{
+    workoutPlans: StoredPlan[];
+    mealPlans: StoredPlan[];
+  }>({ workoutPlans: [], mealPlans: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [showAddWorkout, setShowAddWorkout] = useState(false);
   const [accessToken, setAccessToken] = useState<string>('');
@@ -39,6 +52,113 @@ export function Calendar({ userId }: CalendarProps) {
       setRefreshToken(storedRefreshToken);
     }
   }, []);
+
+  // Fetch stored workout and meal plans
+  useEffect(() => {
+    fetchStoredPlans();
+  }, [userId]);
+
+  const fetchStoredPlans = async () => {
+    try {
+      // Fetch workout plans
+      const workoutResponse = await fetch(`/api/workout-plans?userId=${userId}`);
+      const workoutPlans = workoutResponse.ok ? await workoutResponse.json() : [];
+
+      // Fetch meal plans
+      const mealResponse = await fetch(`/api/meal-plans?userId=${userId}`);
+      const mealPlans = mealResponse.ok ? await mealResponse.json() : [];
+
+      setStoredPlans({ workoutPlans, mealPlans });
+
+      // Convert plans to calendar events
+      const planEvents = convertPlansToEvents(workoutPlans, mealPlans);
+      setEvents(planEvents);
+    } catch (error) {
+      console.error('Error fetching stored plans:', error);
+    }
+  };
+
+  const convertPlansToEvents = (workoutPlans: StoredPlan[], mealPlans: StoredPlan[]): CalendarEvent[] => {
+    const events: CalendarEvent[] = [];
+
+    // Convert workout plans to events
+    workoutPlans.forEach(plan => {
+      if (plan.plan_data?.weekly_schedule) {
+        plan.plan_data.weekly_schedule.forEach((workout: any) => {
+          const nextOccurrence = getNextDayOccurrence(workout.day, 9); // 9 AM workouts
+          const endTime = new Date(nextOccurrence.getTime() + 45 * 60 * 1000); // 45 min duration
+
+          events.push({
+            id: `workout-${plan.id}-${workout.day}`,
+            summary: `🏋️ ${workout.workout_type}`,
+            start: { dateTime: nextOccurrence.toISOString() },
+            end: { dateTime: endTime.toISOString() },
+            description: formatWorkoutDescription(workout),
+            colorId: '1' // Blue for workouts
+          });
+        });
+      }
+    });
+
+    // Convert meal plans to events
+    mealPlans.forEach(plan => {
+      if (plan.plan_data?.weekly_meals) {
+        plan.plan_data.weekly_meals.forEach((dayMeals: any) => {
+          dayMeals.meals.forEach((meal: any) => {
+            let startHour = 8; // Default breakfast time
+            if (meal.meal === 'lunch') startHour = 12;
+            else if (meal.meal === 'dinner') startHour = 18;
+            else if (meal.meal === 'snack') startHour = 15;
+
+            const startTime = getNextDayOccurrence(dayMeals.day, startHour);
+            const endTime = new Date(startTime.getTime() + 30 * 60 * 1000); // 30 min meal
+
+            events.push({
+              id: `meal-${plan.id}-${dayMeals.day}-${meal.meal}`,
+              summary: `🍽️ ${meal.name}`,
+              start: { dateTime: startTime.toISOString() },
+              end: { dateTime: endTime.toISOString() },
+              description: formatMealDescription(meal),
+              colorId: '2' // Green for meals
+            });
+          });
+        });
+      }
+    });
+
+    return events;
+  };
+
+  const getNextDayOccurrence = (dayName: string, startHour: number = 9) => {
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const targetDay = days.indexOf(dayName.toLowerCase());
+    const today = new Date();
+    const currentDay = today.getDay();
+
+    let daysUntilTarget = targetDay - currentDay;
+    if (daysUntilTarget <= 0) daysUntilTarget += 7; // Next week
+
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + daysUntilTarget);
+    targetDate.setHours(startHour, 0, 0, 0);
+
+    return targetDate;
+  };
+
+  const formatWorkoutDescription = (workout: any) => {
+    const exercises = workout.exercises?.map((ex: any) =>
+      `• ${ex.name}: ${ex.sets}x${ex.reps} @ ${ex.weight}\n  ${ex.notes || ''}`
+    ).join('\n\n') || 'No exercises specified';
+
+    const stretching = workout.stretching?.map((stretch: string) => `• ${stretch}`).join('\n') || 'No stretching specified';
+
+    return `🏋️ ${workout.workout_type.toUpperCase()}\n\n💪 EXERCISES:\n${exercises}\n\n🧘 STRETCHING:\n${stretching}`;
+  };
+
+  const formatMealDescription = (meal: any) => {
+    const ingredients = meal.ingredients?.map((ing: string) => `• ${ing}`).join('\n') || 'No ingredients specified';
+    return `🍽️ ${meal.name.toUpperCase()}\n\n📊 NUTRITION:\n• Calories: ${meal.calories}\n\n🥘 INGREDIENTS:\n${ingredients}\n\n👨‍🍳 INSTRUCTIONS:\n${meal.instructions || 'No instructions specified'}`;
+  };
 
   // Handle OAuth callback when returning to calendar page
   useEffect(() => {
@@ -301,7 +421,7 @@ export function Calendar({ userId }: CalendarProps) {
     try {
       // Generate default exercises based on workout type and focus
       const defaultExercises = generateDefaultExercises(workoutData.workoutType, workoutData.focus);
-      
+
       const workoutEvent = {
         title: workoutData.title,
         date: workoutData.date,
@@ -329,7 +449,7 @@ export function Calendar({ userId }: CalendarProps) {
         const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
         const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
         fetchEvents(startOfMonth, endOfMonth);
-        
+
         setShowAddWorkout(false);
         alert(`Workout added successfully! Event ID: ${result.eventId}`);
       } else {
@@ -345,7 +465,7 @@ export function Calendar({ userId }: CalendarProps) {
   // Generate default exercises based on workout type and focus
   const generateDefaultExercises = (workoutType: string, focus: string) => {
     const exercises: Array<{ name: string; sets: number; reps: string }> = [];
-    
+
     if (workoutType === 'strength') {
       if (focus === 'full_body') {
         exercises.push(
@@ -403,7 +523,7 @@ export function Calendar({ userId }: CalendarProps) {
         { name: 'Cool-down', sets: 1, reps: '5 minutes' }
       );
     }
-    
+
     return exercises;
   };
 
@@ -421,6 +541,13 @@ export function Calendar({ userId }: CalendarProps) {
           {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
         </h2>
         <div className="flex gap-2">
+          <Button
+            onClick={() => fetchStoredPlans()}
+            variant="outline"
+            disabled={isLoading}
+          >
+            🔄 Refresh Plans
+          </Button>
           <Button onClick={goToPreviousMonth} variant="outline">
             ← Previous
           </Button>
@@ -439,13 +566,13 @@ export function Calendar({ userId }: CalendarProps) {
 
       {/* Connection Status */}
       {!accessToken && (
-        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-yellow-800">
-                🔗 <strong>Google Calendar not connected.</strong>
+              <p className="text-blue-800">
+                📅 <strong>In-App Calendar Active!</strong>
                 <br />
-                <span className="text-sm">Connect to see your real calendar events and add workouts directly.</span>
+                <span className="text-sm">Your workout and meal plans from FitSmith are displayed here. Connect Google Calendar for additional features.</span>
               </p>
             </div>
             <Button

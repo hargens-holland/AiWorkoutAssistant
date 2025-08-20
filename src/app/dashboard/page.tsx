@@ -1,341 +1,420 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import { ProtectedRoute } from '@/components/ProtectedRoute';
-import { GoalManager } from '@/components/GoalManager';
-import { FitnessChat } from '@/components/FitnessChat';
-import { useGoal } from '@/contexts/GoalContext';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import Link from 'next/link';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useGoal } from '@/contexts/GoalContext';
+import { AIChat } from '@/components/AIChat';
 
-export default function DashboardPage() {
+export default function Dashboard() {
   const { data: session } = useSession();
-  const router = useRouter();
-  const { activeGoal, refreshActiveGoal } = useGoal();
-  const [showChat, setShowChat] = useState(false);
-  const [extractedData, setExtractedData] = useState<any>(null);
-  const [isCreatingGoal, setIsCreatingGoal] = useState(false);
-  const [createdGoal, setCreatedGoal] = useState<any>(null);
+  const { activeGoal, setActiveGoal } = useGoal();
+  const [goals, setGoals] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [newGoalText, setNewGoalText] = useState('');
+  const [showGoalInput, setShowGoalInput] = useState(false);
 
-  const handleGoalChange = () => {
-    refreshActiveGoal();
-  };
+  // Fetch user's goals
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchGoals();
+    }
+  }, [session?.user?.id]);
 
-  const handleChatComplete = (data: any) => {
-    console.log('Extracted fitness data:', data);
-    setExtractedData(data);
-    setShowChat(false);
-  };
+  const fetchGoals = async () => {
+    if (!session?.user?.id) return;
 
-  const handleChatCancel = () => {
-    setShowChat(false);
-    setExtractedData(null);
-  };
-
-  const handleStartOver = () => {
-    setShowChat(true);
-    setExtractedData(null);
-    setCreatedGoal(null);
-  };
-
-  const handleCreateGoal = async () => {
-    if (!extractedData || !session?.user?.id) return;
-
-    setIsCreatingGoal(true);
     try {
-      // Format the data for the goals API
-      const goalData = {
-        title: extractedData.target || 'Fitness Goal',
-        description: extractedData.target || 'Personal fitness goal',
-        type: extractedData.goal_type || extractedData.type || 'general_fitness',
-        target: extractedData.target || 'Improve fitness',
-        timeframe: extractedData.timeframe || '3 months',
-        startDate: new Date().toISOString().split('T')[0],
-        targetDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 90 days from now
-        isActive: true,
-        currentWeight: extractedData.current_weight || extractedData.currentWeight,
-        targetWeight: extractedData.target_weight || extractedData.targetWeight,
-        currentBench: extractedData.current_bench || extractedData.currentBench,
-        targetBench: extractedData.target_bench || extractedData.targetBench,
-        currentMileTime: extractedData.current_mile_time || extractedData.currentMileTime,
-        targetMileTime: extractedData.target_mile_time || extractedData.targetMileTime,
-        workoutDays: extractedData.workout_days || extractedData.workoutDays,
-        workoutDuration: extractedData.workout_duration || extractedData.workoutDuration,
-        workoutTime: extractedData.workout_time || extractedData.workoutTime,
-        experienceLevel: extractedData.experience_level || extractedData.experienceLevel,
-        availableEquipment: extractedData.available_equipment || extractedData.availableEquipment,
-        gymAccess: (extractedData.available_equipment || extractedData.availableEquipment)?.includes('gym_access') || false,
-        dietaryRestrictions: extractedData.dietary_restrictions || extractedData.dietaryRestrictions || [],
-        allergies: '',
-        mealPrepTime: 30,
-        cookingSkill: 'intermediate',
-        sleepSchedule: 'normal',
-        stressLevel: 'moderate',
-        travelFrequency: 'rarely',
-        previousInjuries: '',
-        medicalConditions: '',
-        motivationFactors: ['health', 'appearance', 'performance']
-      };
-
-      const response = await fetch('/api/goals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(goalData),
-      });
-
+      const response = await fetch(`/api/goals?userId=${session.user.id}`);
       if (response.ok) {
-        const result = await response.json();
-        console.log('Goal created successfully:', result);
-        setCreatedGoal(result.goal);
+        const data = await response.json();
+        setGoals(data.goals || []);
 
-        // Refresh the active goal
-        await refreshActiveGoal();
-
-        // Clear the form after a short delay
-        setTimeout(() => {
-          setExtractedData(null);
-          setCreatedGoal(null);
-        }, 3000);
-      } else {
-        throw new Error('Failed to create goal');
+        // Set first goal as active if none selected
+        if (data.goals?.length > 0 && !activeGoal) {
+          setActiveGoal(data.goals[0]);
+        }
       }
     } catch (error) {
-      console.error('Error creating goal:', error);
-      alert('Failed to create goal. Please try again.');
-    } finally {
-      setIsCreatingGoal(false);
+      console.error('Error fetching goals:', error);
     }
   };
 
-  if (!session?.user?.id) {
-    return null;
+  const handleCreateGoal = async () => {
+    if (!newGoalText.trim() || !session?.user?.id) return;
+
+    setIsLoading(true);
+    try {
+      // Step 1: Create goal in database
+      const goalResponse = await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: session.user.id,
+          title: newGoalText,
+          description: newGoalText,
+          type: 'general_fitness',
+          target: newGoalText,
+          timeframe: '3 months',
+          startDate: new Date().toISOString().split('T')[0],
+          targetDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          isActive: true
+        })
+      });
+
+      if (!goalResponse.ok) {
+        throw new Error('Failed to create goal');
+      }
+
+      const goal = await goalResponse.json();
+
+      // Step 2: Generate plan with Groq
+      const planResponse = await fetch('/api/ai/generate-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          goalData: {
+            target: newGoalText,
+            timeframe: '3 months',
+            available_equipment: ['gym_access', 'dumbbells', 'barbell', 'resistance_bands'],
+            workout_days: ['monday', 'wednesday', 'friday'],
+            workout_duration: 45
+          }
+        })
+      });
+
+      if (!planResponse.ok) {
+        throw new Error('Failed to generate plan');
+      }
+
+      const planData = await planResponse.json();
+
+      // Step 3: Store workout and meal plans
+      try {
+        // Store workout plan
+        const workoutResponse = await fetch('/api/workout-plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            goalId: goal.id,
+            userId: session.user.id,
+            workoutPlan: planData.plan.workout_plan
+          })
+        });
+
+        if (!workoutResponse.ok) {
+          const workoutError = await workoutResponse.text();
+          console.error('Workout plan storage failed:', workoutError);
+          throw new Error(`Failed to store workout plan: ${workoutError}`);
+        }
+
+        // Store meal plan
+        const mealResponse = await fetch('/api/meal-plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            goalId: goal.id,
+            userId: session.user.id,
+            mealPlan: planData.plan.meal_plan
+          })
+        });
+
+        if (!mealResponse.ok) {
+          const mealError = await mealResponse.text();
+          console.error('Meal plan storage failed:', mealError);
+          throw new Error(`Failed to store meal plan: ${mealError}`);
+        }
+
+        console.log('Plans stored successfully');
+      } catch (error) {
+        console.error('Error storing plans:', error);
+        // Continue anyway - the goal was created successfully
+      }
+
+      // Step 4: Store plans in the database (they'll automatically appear in the in-app calendar)
+      console.log('Plans created successfully! They will appear in your in-app calendar.');
+
+      // Success! Refresh goals and set as active
+      await fetchGoals();
+      setActiveGoal(goal);
+      setNewGoalText('');
+      setShowGoalInput(false);
+
+      alert(`🎉 Goal created successfully! Your workout and meal plans are now available in the calendar!`);
+
+    } catch (error) {
+      console.error('Error creating goal:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`❌ Error: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoalSwitch = (goal: any) => {
+    setActiveGoal(goal);
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!confirm('Are you sure you want to delete this goal? This will also remove all associated plans and calendar events.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/goals/${goalId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: session?.user?.id })
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setGoals(prev => prev.filter(g => g.id !== goalId));
+
+        // If this was the active goal, clear it
+        if (activeGoal?.id === goalId) {
+          setActiveGoal(null);
+        }
+
+        alert('Goal deleted successfully!');
+      } else {
+        throw new Error('Failed to delete goal');
+      }
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+      alert('Failed to delete goal. Please try again.');
+    }
+  };
+
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Welcome to FitSmith</h1>
+          <p className="text-gray-600">Please sign in to access your dashboard.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <ProtectedRoute>
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Welcome back, {session.user.name || 'Fitness Warrior'}! 💪
-            </h1>
-            <p className="text-gray-600">
-              Ready to crush your fitness goals today?
-            </p>
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          Welcome back, {session.user.name}! 💪
+        </h1>
+        <p className="text-gray-600">Ready to crush your fitness goals today? 🎉</p>
+      </div>
 
-          {/* Active Goal Summary */}
-          {activeGoal && (
-            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    🎯 Active Goal: {activeGoal.title}
-                  </h2>
-                  <p className="text-gray-700 mb-2">{activeGoal.description}</p>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600">
-                    <span>Type: {activeGoal.type}</span>
-                    <span>Target: {activeGoal.target}</span>
-                    <span>Progress: {activeGoal.progress}%</span>
-                  </div>
-                </div>
-                <div className="flex space-x-3">
-                  <Link href="/plans">
-                    <Button variant="outline">
-                      📋 View Plans
-                    </Button>
-                  </Link>
-                  <Link href="/calendar">
-                    <Button variant="outline">
-                      📅 View Calendar
-                    </Button>
-                  </Link>
-                </div>
+      {/* Goal Creation Section */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>🎯 Create New Goal</CardTitle>
+          <CardDescription>
+            Simply describe your fitness goal and our AI will generate a complete plan!
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!showGoalInput ? (
+            <Button
+              onClick={() => setShowGoalInput(true)}
+              className="w-full"
+              size="lg"
+            >
+              🚀 Create New Goal
+            </Button>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="goalInput">What's your fitness goal?</Label>
+                <Input
+                  id="goalInput"
+                  placeholder="e.g., I want to lose 20 pounds and get stronger"
+                  value={newGoalText}
+                  onChange={(e) => setNewGoalText(e.target.value)}
+                  className="mt-2"
+                />
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  onClick={handleCreateGoal}
+                  disabled={isLoading || !newGoalText.trim()}
+                  className="flex-1"
+                >
+                  {isLoading ? 'Creating...' : '🎯 Create Goal & Generate Plan'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowGoalInput(false);
+                    setNewGoalText('');
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          {/* Chat Interface or Goal Creation */}
-          {showChat ? (
-            <div className="mb-8">
-              <FitnessChat
-                onComplete={handleChatComplete}
-                onCancel={handleChatCancel}
-              />
-            </div>
-          ) : extractedData ? (
-            <div className="mb-8 space-y-6">
-              {/* Success Message */}
-              <Card className="bg-green-50 border-green-200">
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <div className="text-6xl mb-4">🎉</div>
-                    <h2 className="text-2xl font-bold text-green-900 mb-2">
-                      Perfect! I've Got Your Goal Info
-                    </h2>
-                    <p className="text-green-700 mb-6">
-                      Now let me create your goal and then our AI agent will generate your personalized plans!
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Extracted Data Display */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>📋 Your New Goal Details</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-3">
-                      <div>
-                        <span className="font-medium text-gray-700">Goal Type:</span>
-                        <Badge className="ml-2" variant="outline">
-                          {extractedData?.type || 'Not specified'}
-                        </Badge>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Target:</span>
-                        <span className="ml-2 text-gray-600">
-                          {extractedData?.target || 'Not specified'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Timeframe:</span>
-                        <span className="ml-2 text-gray-600">
-                          {extractedData?.timeframe || 'Not specified'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Experience Level:</span>
-                        <Badge className="ml-2" variant="outline">
-                          {extractedData?.experienceLevel || 'Not specified'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <div>
-                        <span className="font-medium text-gray-700">Equipment:</span>
-                        <div className="mt-1">
-                          {extractedData?.availableEquipment?.map((item: string, index: number) => (
-                            <Badge key={index} variant="secondary" className="mr-2 mb-1">
-                              {item}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Workout Days:</span>
-                        <div className="mt-1">
-                          {extractedData?.workoutDays?.map((day: string, index: number) => (
-                            <Badge key={index} variant="outline" className="mr-2 mb-1">
-                              {day}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="font-medium text-gray-700">Duration:</span>
-                        <span className="ml-2 text-gray-600">
-                          {extractedData?.workoutDuration || 'Not specified'} minutes
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Goal Creation */}
-              {!createdGoal && (
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardHeader>
-                    <CardTitle className="text-blue-900">🚀 Create Your Goal</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-blue-700 mb-4">
-                      Ready to create this goal? Our AI agent will then generate your personalized workout and meal plans!
-                    </p>
-
-                    <div className="flex space-x-3">
-                      <Button
-                        onClick={handleCreateGoal}
-                        disabled={isCreatingGoal}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        {isCreatingGoal ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Creating Goal...
-                          </>
-                        ) : (
-                          '🎯 Create This Goal!'
-                        )}
-                      </Button>
-                      <Button onClick={handleStartOver} variant="outline">
-                        🔄 Start Over
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Success State */}
-              {createdGoal && (
-                <Card className="bg-green-50 border-green-200">
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <div className="text-4xl mb-4">✅</div>
-                      <h3 className="text-xl font-bold text-green-900 mb-2">
-                        Goal Created Successfully!
-                      </h3>
-                      <p className="text-green-700 mb-4">
-                        Our AI agent will now generate your personalized plans!
+      {/* Goals List */}
+      {goals.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>📋 Your Goals</CardTitle>
+            <CardDescription>
+              Switch between goals to see different plans and calendars
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {goals.map((goal) => (
+                <div
+                  key={goal.id}
+                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${activeGoal?.id === goal.id
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  onClick={() => handleGoalSwitch(goal)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold">{goal.title}</h3>
+                      <p className="text-sm text-gray-600">
+                        {goal.timeframe} • {goal.type}
                       </p>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    <div className="flex items-center gap-2">
+                      {activeGoal?.id === goal.id && (
+                        <Badge variant="secondary">Active</Badge>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteGoal(goal.id);
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        🗑️
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ) : (
-            /* Quick Actions */
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Button
-                  onClick={() => setShowChat(true)}
-                  className="h-20 text-lg"
-                  variant="default"
-                >
-                  🎯 Create New Goal
-                </Button>
-                <Link href="/plans">
-                  <Button className="w-full h-20 text-lg" variant="outline">
-                    📋 View Plans
-                  </Button>
-                </Link>
-                <Link href="/calendar">
-                  <Button className="w-full h-20 text-lg" variant="outline">
-                    📅 View Calendar
-                  </Button>
-                </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Goal Display */}
+      {activeGoal && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>🎯 Active Goal: {activeGoal.title}</CardTitle>
+            <CardDescription>
+              Your current focus and progress
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span>Progress</span>
+                  <span>{activeGoal.progress || 0}%</span>
+                </div>
+                <Progress value={activeGoal.progress || 0} className="w-full" />
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Timeframe:</span>
+                  <p className="text-gray-600">{activeGoal.timeframe}</p>
+                </div>
+                <div>
+                  <span className="font-medium">Type:</span>
+                  <p className="text-gray-600">{activeGoal.type}</p>
+                </div>
               </div>
             </div>
-          )}
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Goal Management */}
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Goal Management</h2>
-            <GoalManager userId={session.user.id} onGoalChange={handleGoalChange} />
-          </div>
+      {/* Plans Display */}
+      {activeGoal && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>🏋️ Workout Plan</CardTitle>
+              <CardDescription>
+                Your personalized workout schedule
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-gray-500">
+                <p>Workout plans will be displayed here</p>
+                <p className="text-sm">Generated automatically when you create goals</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>🍽️ Meal Plan</CardTitle>
+              <CardDescription>
+                Your personalized nutrition plan
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-gray-500">
+                <p>Meal plans will be displayed here</p>
+                <p className="text-sm">Generated automatically when you create goals</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </div>
-    </ProtectedRoute>
+      )}
+
+      {/* AI Chat Section */}
+      {activeGoal && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>⚡ Quick Actions</CardTitle>
+              <CardDescription>
+                Manage your fitness plans and calendar
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Button variant="outline" className="h-20">
+                  📅 View Calendar
+                </Button>
+                <Button variant="outline" className="h-20">
+                  📋 View Plans
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <AIChat
+            goalId={activeGoal.id}
+            goalTitle={activeGoal.title}
+            onPlanUpdate={(updates) => {
+              console.log('Plan updates suggested:', updates);
+              // TODO: Implement plan update logic
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
