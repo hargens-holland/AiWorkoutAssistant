@@ -25,7 +25,7 @@ function CalendarContent() {
                 <p className="text-gray-600">View and manage your daily fitness and meal plans</p>
             </div>
 
-            <Calendar userId={session.user.email} />
+            <Calendar userId={session.user.id} />
         </div>
     );
 }

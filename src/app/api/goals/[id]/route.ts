@@ -82,21 +82,46 @@ export async function DELETE(
 ) {
   try {
     const { id: goalId } = await params;
+    const { userId } = await request.json();
 
-    const { error } = await supabase
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // First, check if the goal belongs to the user
+    const { data: existingGoal, error: fetchError } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('id', goalId)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !existingGoal) {
+      return NextResponse.json(
+        { error: 'Goal not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    // Delete the goal
+    const { error: deleteError } = await supabase
       .from('goals')
       .delete()
-      .eq('id', goalId);
+      .eq('id', goalId)
+      .eq('user_id', userId);
 
-    if (error) {
-      console.error('Error deleting goal:', error);
+    if (deleteError) {
+      console.error('Error deleting goal:', deleteError);
       return NextResponse.json(
         { error: 'Failed to delete goal' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ message: 'Goal deleted successfully' });
+    return NextResponse.json({ success: true });
 
   } catch (error) {
     console.error('Error in goal DELETE:', error);
